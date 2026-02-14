@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ParkOS · Münster</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ──────────────────────────────────────────────────
+   стилі кольори
+────────────────────────────────────────────────── */
+
+:root {
+  --ink:   #07090f;
+  --s1:    #0d1018;
+  --s2:    #131720;
+  --rim:   rgba(255,255,255,.08);
+  --rim2:  rgba(255,255,255,.14);
+  --ga:    #f5a623;
+  --gb:    #4fc3f7;
+  --gg:    #00e676;
+  --gr:    #ff5252;
+  --gp:    #ea80fc;
+  --t1:    #e8edf5;
+  --t2:    #7a8499;
+  --t3:    #3d4557;
+  --r:     12px;
+}
+
+/* ──────────────────────────────────────────────────
+   BASE — стилі
+────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: 'Space Grotesk', sans-serif;
+  background: var(--ink);
+  color: var(--t1);
+}
+
+/* ──────────────────────────────────────────────────
+   головна оболонка фіксована висота на внсь екран
+────────────────────────────────────────────────── */
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ── верхня панель ── */
+.topbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 18px;
+  background: var(--s1);
+  border-bottom: 1px solid var(--rim);
+  /* Тільки верхня панель має ефект розмиття фону. */
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo-badge {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--gb) 0%, #5b21b6 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 17px; color: #fff;
+  box-shadow: 0 0 14px rgba(79,195,247,.35);
+}
+.logo-name { font-size: 16px; font-weight: 700; letter-spacing: -.3px; }
+.logo-name b { color: var(--gb); }
+.logo-sub { font-size: 10px; color: var(--t2); letter-spacing: .06em; text-transform: uppercase; }
+
+.topbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* loading status loading, ok, error */
+.status-bar {
+  display: flex; align-items: center; gap: 6px;
+}
+.status-pill {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 99px;
+  font-size: 10px; font-weight: 600; letter-spacing: .05em;
+  border: 1px solid;
+  transition: background .3s, color .3s, border-color .3s;
+}
+/* кольори для статусів */
+.status-pill.idle    { background: rgba(61,69,87,.35); border-color: var(--rim); color: var(--t2); }
+.status-pill.loading { background: rgba(245,166,35,.1); border-color: rgba(245,166,35,.3); color: var(--ga); }
+.status-pill.ok      { background: rgba(0,230,118,.08); border-color: rgba(0,230,118,.25); color: var(--gg); }
+.status-pill.error   { background: rgba(255,82,82,.08); border-color: rgba(255,82,82,.25); color: var(--gr); }
+.status-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+  flex-shrink: 0;
+}
+.status-pill.ok .status-dot {
+  animation: dp 1.8s ease-in-out infinite;
+  box-shadow: 0 0 6px currentColor;
+}
+@keyframes dp { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.3;transform:scale(.6)} }
+.status-pill.loading .status-dot {
+  animation: spin 1s linear infinite;
+  border-radius: 0;
+  width: 7px; height: 7px;
+  background: none;
+  border: 2px solid var(--ga);
+  border-top-color: transparent;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+#clock {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--t2);
+  padding: 3px 9px; border-radius: 6px;
+  background: var(--s2); border: 1px solid var(--rim);
+}
+
+/* ── Стилі для блоку зі статистикою ── */
+.stats {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  background: var(--rim);
+  gap: 1px;
+  border-bottom: 1px solid var(--rim);
+}
+@media (max-width: 900px) { .stats { grid-template-columns: repeat(3,1fr); } }
+.st {
+  background: var(--s1);
+  padding: 10px 16px;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.st:hover { background: var(--s2); }
+.st-ico { font-size: 18px; flex-shrink: 0; }
+.st-info { display: flex; flex-direction: column; min-width: 0; }
+.st-label { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .08em; font-weight: 600; white-space: nowrap; }
+.st-val {
+  font-size: 22px; font-weight: 700; line-height: 1.1; letter-spacing: -.5px;
+  font-variant-numeric: tabular-nums;
+}
+.st-sub { font-size: 9px; color: var(--t3); font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+.c-g { color: var(--gg); }
+.c-b { color: var(--gb); }
+.c-r { color: var(--gr); }
+.c-a { color: var(--ga); }
+.c-p { color: var(--gp); }
+
+/* ── BODY: MAP LEFT, TABLE PANEL RIGHT розділ сторінки на дві частини.── */
+.body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* MAP fills all left space карта на всю обл */
+.map-wrap {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+#map {
+  width: 100%;
+  height: 100%;
+}
+/* затемнення карти без фільтра шоб */
+.leaflet-tile {
+  filter: brightness(.45) saturate(.2) contrast(1.1) hue-rotate(195deg);
+}
+.leaflet-container { background: var(--ink) !important; }
+.leaflet-control-zoom {
+  border: 1px solid var(--rim2) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+  box-shadow: none !important;
+}
+.leaflet-control-zoom a {
+  background: var(--s1) !important;
+  color: var(--t2) !important;
+  border-bottom: 1px solid var(--rim) !important;
+  line-height: 30px !important;
+  width: 30px !important;
+  height: 30px !important;
+}
+.leaflet-control-zoom a:hover { color: var(--t1) !important; background: var(--s2) !important; }
+
+/* легенда карти */
+.map-legend {
+  position: absolute;
+  bottom: 14px; left: 14px;
+  z-index: 800;
+  background: rgba(7,9,15,.88);
+  border: 1px solid var(--rim2);
+  border-radius: var(--r);
+  padding: 9px 12px;
+  display: flex; flex-wrap: wrap; gap: 8px;
+  font-size: 10px; color: var(--t2);
+  pointer-events: none;
+}
+.leg { display: flex; align-items: center; gap: 5px; }
+.leg-d { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.leg-s { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+/* ── стилі для правої частини з таблицею ── */
+.panel {
+  width: 680px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--rim);
+  background: var(--s1);
+  overflow: hidden;
+}
+@media (max-width: 900px) {
+  .body { flex-direction: column; }
+  .panel { width: 100%; flex: 0 0 42%; border-left: none; border-top: 1px solid var(--rim); }
+  .map-wrap { flex: 1 1 auto; }
+}
+
+/* ── таблийя оформлення права панель ── */
+.tbl-head {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--rim);
+  background: var(--s2);
+}
+.tbl-title { font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.badge {
+  font-size: 9px; color: var(--t2); background: var(--ink);
+  border: 1px solid var(--rim); border-radius: 4px; padding: 2px 7px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.tbl-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  /* оформлення таблиці */
+  will-change: transform;
+}
+.tbl-scroll::-webkit-scrollbar { width: 3px; }
+.tbl-scroll::-webkit-scrollbar-thumb { background: var(--rim2); border-radius: 2px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 11px; }
+thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--ink);
+  padding: 7px 12px; text-align: left;
+  color: var(--t3); font-size: 9px; text-transform: uppercase;
+  letter-spacing: .09em; font-weight: 600;
+  border-bottom: 1px solid var(--rim);
+}
+tbody tr {
+  border-bottom: 1px solid rgba(255,255,255,.03);
+  transition: background .1s;
+  cursor: pointer;
+}
+tbody tr:hover { background: rgba(79,195,247,.05); }
+tbody tr.rp:hover { background: rgba(234,128,252,.05); }
+tbody td { padding: 7px 12px; vertical-align: middle; }
+td.name-cell {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.sec-row td {
+  font-size: 9px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; font-family: 'JetBrains Mono', monospace;
+  padding: 5px 12px;
+  border-left: 2px solid;
+}
+
+/* %заповнення смужка */
+.pb { width: 50px; height: 3px; background: rgba(255,255,255,.07); border-radius: 2px; display: inline-block; vertical-align: middle; }
+.pb-f { height: 100%; border-radius: 2px; }
+
+/* мітки */
+.chip {
+  display: inline-flex; align-items: center;
+  padding: 1px 6px; border-radius: 99px;
+  font-size: 9px; font-weight: 700; letter-spacing: .05em;
+  border: 1px solid; white-space: nowrap;
+}
+.ch-live   { background: rgba(0,230,118,.1);   color: var(--gg); border-color: rgba(0,230,118,.22); }
+.ch-osm    { background: rgba(79,195,247,.08);  color: var(--gb); border-color: rgba(79,195,247,.2); }
+.ch-pr     { background: rgba(234,128,252,.1);  color: var(--gp); border-color: rgba(234,128,252,.28); }
+.ch-ok     { background: rgba(0,230,118,.1);   color: var(--gg); border-color: rgba(0,230,118,.2); }
+.ch-busy   { background: rgba(245,166,35,.1);  color: var(--ga); border-color: rgba(245,166,35,.2); }
+.ch-full   { background: rgba(255,82,82,.1);   color: var(--gr); border-color: rgba(255,82,82,.2); }
+.ch-closed { background: rgba(61,69,87,.25);   color: var(--t2); border-color: rgba(61,69,87,.5); }
+/* ── споиваюсі вікна ── */
+.cpop .leaflet-popup-content-wrapper {
+  background: rgba(10,12,22,.96);
+  border: 1px solid var(--rim2);
+  border-radius: 12px;
+  color: var(--t1);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px;
+  box-shadow: 0 20px 50px rgba(0,0,0,.9);
+  padding: 0;
+}
+.cpop .leaflet-popup-tip { background: rgba(10,12,22,.96); }
+.cpop .leaflet-popup-close-button { color: var(--t2) !important; top: 9px !important; right: 11px !important; }
+.cpop .leaflet-popup-content { margin: 0; }
+
+.pop { padding: 14px 16px; min-width: 210px; }
+.pop-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 99px;
+  font-size: 8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  border: 1px solid; margin-bottom: 8px;
+}
+.pb-live { background: rgba(0,230,118,.1);   color: var(--gg); border-color: rgba(0,230,118,.3); }
+.pb-osm  { background: rgba(79,195,247,.1);  color: var(--gb); border-color: rgba(79,195,247,.3); }
+.pb-pr   { background: rgba(234,128,252,.1); color: var(--gp); border-color: rgba(234,128,252,.35); }
+.pop-name { font-size: 14px; font-weight: 700; margin-bottom: 10px; line-height: 1.2; }
+.pop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.pk-label { font-size: 8px; color: var(--t2); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
+.pk-val   { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pop-bar  { height: 3px; background: rgba(255,255,255,.08); border-radius: 2px; overflow: hidden; }
+.pop-bar-f { height: 100%; border-radius: 2px; }
+.pop-note { font-size: 10px; color: var(--t2); line-height: 1.5; padding-top: 8px; border-top: 1px solid var(--rim); margin-top: 8px; }
+
+/* Loading анімація */
+.skel td { padding: 8px 12px; }
+.skel-line {
+  height: 10px; border-radius: 4px;
+  background: linear-gradient(90deg, var(--s2) 25%, var(--rim) 50%, var(--s2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+/* Спливаюче повідомлення */
+#toast {
+  position: fixed;
+  bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--s2); border: 1px solid var(--rim2);
+  border-radius: 8px; padding: 10px 18px;
+  font-size: 12px; color: var(--t1);
+  z-index: 9999;
+  opacity: 0; transition: opacity .3s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+#toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- верх: назва логотип -->
+  <header class="topbar">
+    <div class="logo">
+      <div class="logo-badge">P</div>
+      <div>
+        <div class="logo-name">Park<b>OS</b> · Münster</div>
+        <div class="logo-sub">Urban Mobility Intelligence</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="status-bar">
+        <div class="status-pill idle" id="st-pls">
+          <div class="status-dot"></div>
+          <span>PLS</span>
+        </div>
+        <div class="status-pill idle" id="st-osm">
+          <div class="status-dot"></div>
+          <span>OSM</span>
+        </div>
+      </div>
+      <div id="clock">—</div>
+    </div>
+  </header>
+
+  <!-- панель під верхнім меню кількість всього -->
+  <div class="stats">
+    <div class="st">
+      <div class="st-ico">🟢</div>
+      <div class="st-info">
+        <div class="st-label">PLS Live</div>
+        <div class="st-val c-g" id="s-live">—</div>
+        <div class="st-sub">паркінгів</div>
+      </div>
+    </div>
+    <div class="st">
+      <div class="st-ico">🔵</div>
+      <div class="st-info">
+        <div class="st-label">OSM</div>
+        <div class="st-val c-b" id="s-osm">—</div>
+        <div class="st-sub">об'єктів</div>
+      </div>
+    </div>
+    <div class="st">
+      <div class="st-ico">🚌</div>
+      <div class="st-info">
+        <div class="st-label">P+R</div>
+        <div class="st-val c-p" id="s-pr">—</div>
+        <div class="st-sub">пересадка</div>
+      </div>
+    </div>
+    <div class="st">
+      <div class="st-ico">✅</div>
+      <div class="st-info">
+        <div class="st-label">Вільно</div>
+        <div class="st-val c-g" id="s-free">—</div>
+        <div class="st-sub">місць зараз</div>
+      </div>
+    </div>
+    <div class="st">
+      <div class="st-ico">🔴</div>
+      <div class="st-info">
+        <div class="st-label">Зайнято</div>
+        <div class="st-val c-r" id="s-occ">—</div>
+        <div class="st-sub">авто</div>
+      </div>
+    </div>
+    <div class="st">
+      <div class="st-ico">📊</div>
+      <div class="st-info">
+        <div class="st-label">Заповн. Ø</div>
+        <div class="st-val c-a" id="s-pct">—</div>
+        <div class="st-sub">середнє</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="body">
+
+    <!-- легенда карти значення кольорів -->
+    <div class="map-wrap">
+      <div id="map"></div>
+      <div class="map-legend">
+        <div class="leg"><div class="leg-d" style="background:var(--gg);box-shadow:0 0 5px var(--gg)"></div>Вільно</div>
+        <div class="leg"><div class="leg-d" style="background:var(--ga);box-shadow:0 0 5px var(--ga)"></div>Заповнений</div>
+        <div class="leg"><div class="leg-d" style="background:var(--gr);box-shadow:0 0 5px var(--gr)"></div>Повний</div>
+        <div class="leg"><div class="leg-s" style="background:rgba(79,195,247,.4);border:1px solid var(--gb)"></div>OSM</div>
+        <div class="leg">
+          <svg width="10" height="10" viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9" rx="2.5" fill="rgba(234,128,252,.25)" stroke="var(--gp)" stroke-width="1"/></svg>
+          P+R
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT TABLE PANEL -->
+    <div class="panel">
+
+      <!-- заголовок, найдені таблиці -->
+      <div class="tbl-head">
+        <div class="tbl-title">📋 Всі паркінги</div>
+        <div class="badge" id="tbl-cnt">—</div>
+      </div>
+      <div class="tbl-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Назва</th>
+              <th>Тип</th>
+              <th>Вільно</th>
+              <th>Заповн.</th>
+              <th>Стан</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <!-- skeleton -->
+            <tr class="skel"><td><div class="skel-line" style="width:80%"></div></td><td><div class="skel-line" style="width:40px"></div></td><td><div class="skel-line" style="width:28px"></div></td><td><div class="skel-line" style="width:56px"></div></td><td><div class="skel-line" style="width:54px"></div></td></tr>
+            <tr class="skel"><td><div class="skel-line" style="width:65%"></div></td><td><div class="skel-line" style="width:40px"></div></td><td><div class="skel-line" style="width:28px"></div></td><td><div class="skel-line" style="width:56px"></div></td><td><div class="skel-line" style="width:54px"></div></td></tr>
+            <tr class="skel"><td><div class="skel-line" style="width:72%"></div></td><td><div class="skel-line" style="width:40px"></div></td><td><div class="skel-line" style="width:28px"></div></td><td><div class="skel-line" style="width:56px"></div></td><td><div class="skel-line" style="width:54px"></div></td></tr>
+            <tr class="skel"><td><div class="skel-line" style="width:58%"></div></td><td><div class="skel-line" style="width:40px"></div></td><td><div class="skel-line" style="width:28px"></div></td><td><div class="skel-line" style="width:56px"></div></td><td><div class="skel-line" style="width:54px"></div></td></tr>
+            <tr class="skel"><td><div class="skel-line" style="width:88%"></div></td><td><div class="skel-line" style="width:40px"></div></td><td><div class="skel-line" style="width:28px"></div></td><td><div class="skel-line" style="width:56px"></div></td><td><div class="skel-line" style="width:54px"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- джерела -->
+      <div style="flex-shrink:0;padding:8px 14px;border-top:1px solid var(--rim);background:var(--ink)">
+        <div style="font-size:9px;color:var(--t3);font-family:'JetBrains Mono',monospace;line-height:1.6">
+          🟢 <a href="https://www.stadt-muenster.de/ms/tiefbauamt/pls/PLS-INet.xml" target="_blank"
+            style="color:var(--gb);text-decoration:none">Parkleitsystem Münster</a>
+          &nbsp;·&nbsp;
+          🔵 <a href="https://overpass-api.de" target="_blank"
+            style="color:var(--gb);text-decoration:none">OpenStreetMap Overpass</a>
+          &nbsp;·&nbsp; Шкільний проєкт
+        </div>
+      </div>
+
+    </div><!-- /panel -->
+  </div><!-- /body -->
+</div><!-- /shell -->
+
+<!-- повідомлення внизу екрана -->
+<div id="toast"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+'use strict';
+
+/* ─── карта ─── */
+const map = L.map('map', { zoomControl: true, preferCanvas: true })
+  .setView([51.9607, 7.6261], 13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap',
+  maxZoom: 19
+}).addTo(map);
+
+// види паруінгів
+const lLive = L.layerGroup().addTo(map);
+const lOSM  = L.layerGroup().addTo(map);
+const lPR   = L.layerGroup().addTo(map);
+
+/* ─── координати ─── */
+const PLS_XY = {
+  "Parkhaus Cineplex":           [51.9519,7.6398],
+  "Halle Münsterland P1":        [51.9507,7.6330],
+  "Parkhaus Stadthaus 3":        [51.9596,7.6228],
+  "Parkhaus Coesfelder Kreuz":   [51.9680,7.5841],
+  "Parkhaus Alter Steinweg":     [51.9614,7.6283],
+  "Parkplatz Hörster Platz":     [51.9641,7.6210],
+  "Parkhaus Theater":            [51.9627,7.6241],
+  "Parkplatz Hafenmarkt":        [51.9545,7.6455],
+  "Tiefgarage Hafenmarkt":       [51.9542,7.6450],
+  "Parkhaus Aegidii":            [51.9588,7.6268],
+  "Parkplatz Georgskommende":    [51.9608,7.6230],
+  "Parkplatz Busparkplatz":      [51.9560,7.6350],
+  "Parkplatz Schlossplatz Nord": [51.9641,7.6138],
+  "Parkplatz Schlossplatz Süd":  [51.9633,7.6145],
+  "Parkhaus Bahnhofstraße":      [51.9574,7.6355],
+  "Parkhaus Bremer Platz":       [51.9558,7.6363],
+  "Parkhaus Engelenschanze":     [51.9546,7.6400],
+  "Parkhaus Galeria":            [51.9618,7.6278],
+  "Parkhaus Münster-Arkaden":    [51.9616,7.6261],
+  "Parkhaus Stubengasse":        [51.9621,7.6284],
+};
+function xy(name) {
+  if (PLS_XY[name]) return PLS_XY[name];
+  for (const [k,v] of Object.entries(PLS_XY))
+    if (name.includes(k.split(' ').pop()) || k.includes(name.split(' ').pop())) return v;
+  return [51.9607+(Math.random()-.5)*.01, 7.6261+(Math.random()-.5)*.01];
+}
+
+/* ─── колір ─── */
+function pCol(p) { return p>=90?'#ff5252': p>=60?'#f5a623': '#00e676'; }
+
+/* ─── Live – велика крапля, OSM – квадрат, P+R – фіолетова крапля  ─── */
+function mkLive(frei, pct, closed) {
+  const c   = closed ? '#4a5060' : pCol(pct);
+  const lbl = closed ? '—' : String(frei);
+  const shadow = closed ? '' : `filter:drop-shadow(0 2px 6px ${c}99)`;
+  return L.divIcon({ className:'', iconSize:[38,50], iconAnchor:[19,50], popupAnchor:[0,-52],
+    html:`<svg xmlns="http://www.w3.org/2000/svg" width="38" height="50" style="${shadow}">
+      <path d="M19 2C10.2 2 3 9 3 19c0 12 16 29 16 29S35 31 35 19C35 9 27.8 2 19 2Z"
+        fill="${c}" stroke="rgba(0,0,0,.6)" stroke-width="1.5"/>
+      <text x="19" y="21" text-anchor="middle" dominant-baseline="middle"
+        font-family="Space Grotesk,sans-serif" font-weight="700"
+        font-size="${lbl.length>3?8:10}" fill="rgba(0,0,0,.85)">${lbl}</text>
+    </svg>`
+  });
+}
+function mkOSM(cap) {
+  const lbl = cap ? String(cap) : 'P';
+  return L.divIcon({ className:'', iconSize:[22,22], iconAnchor:[11,11], popupAnchor:[0,-13],
+    html:`<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22">
+      <rect x=".5" y=".5" width="21" height="21" rx="5.5"
+        fill="rgba(79,195,247,.15)" stroke="rgba(79,195,247,.55)" stroke-width="1"/>
+      <text x="11" y="12" text-anchor="middle" dominant-baseline="middle"
+        font-family="Space Grotesk,sans-serif" font-weight="700"
+        font-size="${cap&&cap>999?6:8}" fill="rgba(79,195,247,.9)">${lbl}</text>
+    </svg>`
+  });
+}
+function mkPR(cap) {
+  const lbl = cap ? String(cap) : '—';
+  return L.divIcon({ className:'', iconSize:[42,54], iconAnchor:[21,54], popupAnchor:[0,-56],
+    html:`<svg xmlns="http://www.w3.org/2000/svg" width="42" height="54"
+        style="filter:drop-shadow(0 3px 9px rgba(234,128,252,.6))">
+      <path d="M21 2C12 2 3 10.8 3 21c0 14 18 31 18 31s18-17 18-31C39 10.8 30 2 21 2Z"
+        fill="#c040d8" stroke="rgba(0,0,0,.5)" stroke-width="1.5"/>
+      <circle cx="21" cy="20" r="11" fill="rgba(0,0,0,.2)"/>
+      <text x="21" y="17" text-anchor="middle" dominant-baseline="middle"
+        font-family="Space Grotesk,sans-serif" font-weight="700" font-size="8.5"
+        fill="rgba(255,255,255,.95)" letter-spacing=".3">P+R</text>
+      ${cap?`<text x="21" y="26" text-anchor="middle" dominant-baseline="middle"
+        font-family="JetBrains Mono,monospace" font-size="7" fill="rgba(255,255,255,.65)">${cap}</text>`:''}
+    </svg>`
+  });
+}
+
+/* ─── park + ride перевірка ─── */
+function detPR(tags, name) {
+  if (tags?.park_ride === 'yes' || tags?.['park:type'] === 'park_and_ride') return true;
+  const n = (name||'').toLowerCase();
+  return n.includes('p+r') || n.includes('park+ride') || n.includes('park & ride') || n.includes('park and ride');
+}
+
+/* ─── статус loading ok error ─── */
+function setStatus(id, state, label) {
+  const el = document.getElementById(id);
+  el.className = 'status-pill ' + state;
+  el.querySelector('span').textContent = label;
+}
+
+/* ─── повідомленя внизу екрана ─── */
+let toastTimer;
+function toast(msg, dur=3500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), dur);
+}
+
+/* ─── live данні ─── */
+const XML_URL = 'https://www.stadt-muenster.de/ms/tiefbauamt/pls/PLS-INet.xml';
+const PROXIES = [
+  u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+  u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  u => `https://thingproxy.freeboard.io/fetch/${u}`,
+];
+
+async function fetchXML() {
+  try {
+    const r = await fetch(XML_URL, { signal: AbortSignal.timeout(5000) });
+    if (r.ok) return r.text();
+  } catch(_) {}
+  for (const fn of PROXIES) {
+    try {
+      const r = await fetch(fn(XML_URL), { signal: AbortSignal.timeout(12000) });
+      if (r.ok) { const t = await r.text(); if (t.length > 50) return t; }
+    } catch(e) { console.warn('[PLS proxy]', e.message); }
+  }
+  throw new Error('Всі проксі недоступні');
+}
+
+function parseXML(raw) {
+  const doc = new DOMParser().parseFromString(
+    raw.replace(/^\uFEFF/,'').trim(), 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('Помилка парсингу XML');
+  return [...doc.querySelectorAll('parkhaus')].map(el => {
+    const t = tag => el.querySelector(tag)?.textContent?.trim() ?? '';
+    const name = t('bezeichnung'), gesamt = +t('gesamt')||0, frei = +t('frei')||0;
+    const status = t('status').toLowerCase(), zeit = t('zeitstempel');
+    if (!name) return null;
+    const belegt = Math.max(0, gesamt - frei);
+    const pct    = gesamt > 0 ? Math.round(belegt/gesamt*100) : 0;
+    return { name, gesamt, frei, belegt, pct, status,
+             closed: status==='geschlossen', zeit, isLive:true, pr:detPR({}, name) };
+  }).filter(Boolean);
+}
+
+/* ─── запит до API Overpass і обробка данних) ─── */
+const OVR_URL = 'https://overpass-api.de/api/interpreter';
+const BBOX    = '51.8929,7.5291,52.0076,7.7351';
+const OVR_Q   = `[out:json][timeout:25];(node["amenity"="parking"](${BBOX});way["amenity"="parking"](${BBOX});relation["amenity"="parking"](${BBOX}););out center tags;`;
+
+async function fetchOSM() {
+  const r = await fetch(OVR_URL, { method:'POST', body:OVR_Q, signal:AbortSignal.timeout(30000) });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function parseOSM(data, plsNames) {
+  const TYPES = { underground:'Підземний','multi-storey':'Паркгауз',surface:'Відкритий',rooftop:'Дах' };
+  return data.elements.map(el => {
+    const lat = el.lat ?? el.center?.lat, lng = el.lon ?? el.center?.lon;
+    if (!lat || !lng) return null;
+    const tags = el.tags ?? {}, name = tags.name ?? tags['name:de'] ?? null;
+    const capacity = +tags.capacity || null, type = tags.parking ?? 'surface', access = tags.access ?? 'yes';
+    if (access === 'private' && !name) return null;
+    if (name && plsNames.some(n => n.toLowerCase().includes((name||'').toLowerCase().slice(0,8)))) return null;
+    return { lat, lng, name, capacity, type, tl: TYPES[type]??'Паркінг', access,
+             isLive: false, pr: detPR(tags, name) };
+  }).filter(Boolean);
+}
+
+/* ─── при натисканні на маркер інформація ─── */
+function popLive(l) {
+  const c = l.closed ? 'var(--t2)' : pCol(l.pct);
+  return `<div class="pop">
+    <div class="pop-badge pb-live">🟢 LIVE · Parkleitsystem</div>
+    <div class="pop-name">${l.name}</div>
+    <div class="pop-grid">
+      <div><div class="pk-label">Вільно</div><div class="pk-val" style="color:${c}">${l.closed?'—':l.frei}</div></div>
+      <div><div class="pk-label">Зайнято</div><div class="pk-val">${l.closed?'—':l.belegt+'/'+l.gesamt}</div></div>
+    </div>
+    ${!l.closed?`<div class="pop-bar"><div class="pop-bar-f" style="width:${l.pct}%;background:${c}"></div></div>`:''}
+    <div class="pop-note">Оновлено: ${l.zeit}</div>
+  </div>`;
+}
+function popPR(l) {
+  const c = l.isLive ? (l.closed?'var(--t2)':pCol(l.pct)) : 'var(--gp)';
+  return `<div class="pop">
+    <div class="pop-badge pb-pr">🚌 P+R · Park+Ride</div>
+    <div class="pop-name">${l.name||'P+R паркінг'}</div>
+    <div class="pop-grid">
+      <div><div class="pk-label">Вільно</div><div class="pk-val" style="color:${c}">${l.isLive?(l.closed?'—':l.frei):'—'}</div></div>
+      <div><div class="pk-label">Місць</div><div class="pk-val">${l.isLive?l.gesamt:(l.capacity??'—')}</div></div>
+    </div>
+    ${l.isLive&&!l.closed?`<div class="pop-bar"><div class="pop-bar-f" style="width:${l.pct}%;background:${c}"></div></div>`:''}
+    <div class="pop-note">🚌 Пересідайте на громадський транспорт у центр міста</div>
+  </div>`;
+}
+function popOSM(l) {
+  const al = {'yes':'Публічний','customers':'Для клієнтів','private':'Приватний'}[l.access] ?? l.access;
+  return `<div class="pop">
+    <div class="pop-badge pb-osm">🔵 OpenStreetMap</div>
+    <div class="pop-name">${l.name??'Паркінг (без назви)'}</div>
+    <div class="pop-grid">
+      <div><div class="pk-label">Тип</div><div class="pk-val" style="font-size:14px">${l.tl}</div></div>
+      <div><div class="pk-label">Місць</div><div class="pk-val">${l.capacity??'—'}</div></div>
+    </div>
+    <div class="pop-note">Доступ: ${al} · Live-дані недоступні</div>
+  </div>`;
+}
+
+/* ─── робить маркери ─── */
+function renderLive(lots) {
+  lLive.clearLayers();
+  lots.filter(l => !l.pr).forEach(l => {
+    L.marker(xy(l.name), { icon: mkLive(l.frei, l.pct, l.closed), zIndexOffset: 1000 })
+      .bindPopup(popLive(l), { className:'cpop', maxWidth:265 })
+      .addTo(lLive);
+  });
+}
+function renderOSM(lots) {
+  lOSM.clearLayers();
+  lots.filter(l => !l.pr).forEach(l => {
+    L.marker([l.lat, l.lng], { icon: mkOSM(l.capacity) })
+      .bindPopup(popOSM(l), { className:'cpop', maxWidth:255 })
+      .addTo(lOSM);
+  });
+}
+function renderPR(live, osm) {
+  lPR.clearLayers();
+  live.filter(l => l.pr).forEach(l => {
+    L.marker(xy(l.name), { icon: mkPR(l.gesamt), zIndexOffset: 2000 })
+      .bindPopup(popPR(l), { className:'cpop', maxWidth:265 }).addTo(lPR);
+  });
+  osm.filter(l => l.pr).forEach(l => {
+    L.marker([l.lat, l.lng], { icon: mkPR(l.capacity), zIndexOffset: 2000 })
+      .bindPopup(popPR(l), { className:'cpop', maxWidth:265 }).addTo(lPR);
+  });
+}
+
+/* ─── рахує статистику і оновлює іі ─── */
+function renderStats(live, osm) {
+  const open  = live.filter(l => !l.closed);
+  const ges   = open.reduce((s,l) => s+l.gesamt, 0);
+  const frei  = open.reduce((s,l) => s+l.frei, 0);
+  const bel   = open.reduce((s,l) => s+l.belegt, 0);
+  const pct   = ges > 0 ? Math.round(bel/ges*100) : 0;
+  const pr    = live.filter(l=>l.pr).length + osm.filter(l=>l.pr).length;
+  const vals  = [live.length, osm.length, pr,
+                 frei.toLocaleString('uk'), bel.toLocaleString('uk'), pct+'%'];
+  ['s-live','s-osm','s-pr','s-free','s-occ','s-pct'].forEach((id,i) => {
+    document.getElementById(id).textContent = vals[i];
+  });
+}
+
+/* ─── створює таблицю з паруінгами та позділяє іх ─── */
+function renderTable(live, osm) {
+  const tbody = document.getElementById('tbody');
+  const frag  = document.createDocumentFragment();
+  let cnt = 0;
+
+  const prL = live.filter(l => l.pr), prO = osm.filter(l => l.pr);
+  if (prL.length + prO.length) {
+    frag.appendChild(secRow('🚌 Park+Ride','rgba(234,128,252,.06)','rgba(234,128,252,.3)','var(--gp)'));
+    prL.forEach(l => { frag.appendChild(liveRow(l,true)); cnt++; });
+    prO.forEach(l => { frag.appendChild(osmRow(l,true));  cnt++; });
+  }
+
+  const regL = [...live.filter(l=>!l.pr)].sort((a,b) =>
+    a.closed===b.closed ? b.pct-a.pct : a.closed?1:-1);
+  if (regL.length) {
+    frag.appendChild(secRow('🟢 Live · Parkleitsystem','rgba(0,230,118,.04)','rgba(0,230,118,.3)','var(--gg)'));
+    regL.forEach(l => { frag.appendChild(liveRow(l,false)); cnt++; });
+  }
+
+  const regO = osm.filter(l => !l.pr && (l.name||l.capacity)).slice(0, 80);
+  if (regO.length) {
+    frag.appendChild(secRow('🔵 OpenStreetMap','rgba(79,195,247,.04)','rgba(79,195,247,.3)','var(--gb)'));
+    regO.forEach(l => { frag.appendChild(osmRow(l,false)); cnt++; });
+  }
+
+  tbody.innerHTML = '';
+  tbody.appendChild(frag);
+  document.getElementById('tbl-cnt').textContent = `${cnt} об'єктів`;
+}
+
+function secRow(lbl, bg, brdC, col) {
+  const tr = document.createElement('tr');
+  tr.className = 'sec-row';
+  tr.innerHTML = `<td colspan="5" style="background:${bg};color:${col};border-left-color:${brdC};border-bottom-color:${brdC}">${lbl}</td>`;
+  return tr;
+}
+function liveRow(l, isPR) {
+  const c  = l.closed ? 'var(--t3)' : pCol(l.pct);
+  const sc = l.closed?'ch-closed': l.pct>=90?'ch-full': l.pct>=60?'ch-busy':'ch-ok';
+  const st = l.closed?'Зачинено': l.pct>=90?'Повний': l.pct>=60?'Заповнений':'Вільно';
+  const c0 = xy(l.name);
+  const tr = document.createElement('tr');
+  if (isPR) tr.classList.add('rp');
+  tr.innerHTML = `
+    <td class="name-cell" title="${l.name}">${l.name}</td>
+    <td>${isPR?'<span class="chip ch-pr">P+R</span>':'<span class="chip ch-live">LIVE</span>'}</td>
+    <td style="color:${c};font-weight:700;font-family:'JetBrains Mono',monospace">${l.closed?'—':l.frei}</td>
+    <td>${l.closed?`<span style="color:var(--t3)">—</span>`:`
+      <div style="display:flex;align-items:center;gap:5px">
+        <div class="pb"><div class="pb-f" style="width:${l.pct}%;background:${c}"></div></div>
+        <span style="color:var(--t2);font-family:'JetBrains Mono',monospace;font-size:9px">${l.pct}%</span>
+      </div>`}</td>
+    <td><span class="chip ${sc}">${st}</span></td>`;
+  tr.addEventListener('click', () => { map.setView(c0, 17, {animate:true}); toast('📍 ' + l.name); });
+  return tr;
+}
+function osmRow(l, isPR) {
+  const tr = document.createElement('tr');
+  if (isPR) tr.classList.add('rp');
+  const n = l.name ?? 'без назви';
+  tr.innerHTML = `
+    <td class="name-cell" style="color:var(--t2)" title="${n}">${n}</td>
+    <td>${isPR?'<span class="chip ch-pr">P+R</span>':'<span class="chip ch-osm">OSM</span>'}</td>
+    <td style="color:var(--t3);font-family:'JetBrains Mono',monospace">—</td>
+    <td style="color:var(--t3);font-family:'JetBrains Mono',monospace">${l.capacity?l.capacity+'м':'—'}</td>
+    <td style="color:var(--t3)">${l.tl}</td>`;
+  tr.addEventListener('click', () => { map.setView([l.lat,l.lng], 17, {animate:true}); toast('📍 ' + n); });
+  return tr;
+}
+
+/* ─── оновлює годинник ─── */
+function tickClock() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+/* ─── основна логіка ─── */
+let osmG = [];
+let liveG = [];
+
+async function loadLiveData() {
+  setStatus('st-pls','loading','PLS …');
+  try {
+    const xml  = await fetchXML();
+    liveG      = parseXML(xml);
+    setStatus('st-pls','ok','PLS ✓');
+    renderLive(liveG);
+    renderPR(liveG, osmG);
+    renderStats(liveG, osmG);
+    renderTable(liveG, osmG);
+  } catch(e) {
+    setStatus('st-pls','error','PLS ✗');
+    toast('⚠ PLS: ' + e.message, 5000);
+    console.error('[PLS]', e);
+  }
+}
+
+async function loadOSMData() {
+  setStatus('st-osm','loading','OSM …');
+  try {
+    const data = await fetchOSM();
+    osmG = parseOSM(data, liveG.map(l => l.name));
+    setStatus('st-osm','ok','OSM ✓');
+    renderOSM(osmG);
+    renderPR(liveG, osmG);
+    renderStats(liveG, osmG);
+    renderTable(liveG, osmG);
+    console.log(`[OSM] ${osmG.length} паркінгів, P+R: ${osmG.filter(l=>l.pr).length}`);
+  } catch(e) {
+    setStatus('st-osm','error','OSM ✗');
+    toast('⚠ OSM: ' + e.message, 5000);
+    console.error('[OSM]', e);
+  }
+}
+
+async function init() {
+  await loadLiveData();   // wait for PLS first
+  loadOSMData();          // then fire OSM in parallel
+}
+
+init();
+setInterval(loadLiveData, 60_000);
+</script>
+</body>
+</html>
